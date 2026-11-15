@@ -30,6 +30,7 @@ button:disabled{opacity:.6}
 .key .grid{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:15px}
 .key .grid span{background:var(--okbg);color:var(--ok);padding:1px 8px;border-radius:6px}
 .bar{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.part{display:flex;justify-content:space-between;gap:12px;margin:5px 0;font-size:15px}.part span:last-child{flex:none;font-weight:600}.cq{margin:18px 0;padding-bottom:10px;border-bottom:1px dashed var(--bd)}.cq p{margin:0 0 6px;font-weight:600}
 @media print{main>*:not(#out){display:none}.bar{display:none}.paper{border:0}}
 </style>
 </head>
@@ -47,10 +48,14 @@ button:disabled{opacity:.6}
 <div><label for="etime">সময় (মিনিট)</label><input id="etime" type="number" min="1"></div>
 <div><label for="emarks">পূর্ণমান</label><input id="emarks" type="number" min="1"></div>
 </div>
-<label for="stem">সৃজনশীল প্রশ্ন / উদ্দীপক / টপিক</label>
+<label for="stem" id="stemLabel">সৃজনশীল প্রশ্ন / উদ্দীপক / টপিক</label>
 <textarea id="stem"></textarea>
 <div class="row">
-<div><label for="n">প্রশ্নের সংখ্যা</label><select id="n"><option value="20">২০টি</option><option value="25" selected>২৫টি</option><option value="50">৫০টি</option></select></div>
+<div><label for="type">প্রশ্নের ধরন</label><select id="type"><option value="mcq">MCQ (বহুনির্বাচনি)</option><option value="creative">সৃজনশীল</option></select></div>
+<div id="smodeWrap" hidden><label for="smode">উদ্দীপক</label><select id="smode"><option value="own">আমি নিজে দেব</option><option value="auto">টপিক থেকে বানান</option></select></div>
+</div>
+<div class="row">
+<div><label for="n">প্রশ্নের সংখ্যা</label><select id="n"></select></div>
 <div><label for="lang">ভাষা</label><select id="lang"><option value="Bengali">বাংলা</option><option value="English">English</option></select></div>
 </div>
 <button id="go">প্রশ্নপত্র বানান</button>
@@ -62,12 +67,28 @@ const LAB={Bengali:["ক","খ","গ","ঘ"],English:["A","B","C","D"]};
 const BN="০১২৩৪৫৬৭৮৯";
 const num=(x,l)=>l==="Bengali"?String(x).replace(/\d/g,d=>BN[d]):String(x);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const BATCH=8;
+const COUNTS={mcq:[[20,"২০টি"],[25,"২৫টি"],[50,"৫০টি"]],creative:[[1,"১টি"],[3,"৩টি"],[5,"৫টি"],[7,"৭টি"]]};
+function syncForm(){
+  const t=$("type").value,n=$("n");
+  $("smodeWrap").hidden=t!=="creative";
+  n.textContent="";
+  COUNTS[t].forEach(([v,l],i)=>{const o=document.createElement("option");o.value=v;o.textContent=l;if(t==="mcq"?v===25:v===3)o.selected=true;n.appendChild(o);});
+  $("stemLabel").textContent=t==="mcq"?"সৃজনশীল প্রশ্ন / উদ্দীপক / টপিক":($("smode").value==="own"?"উদ্দীপক (এটি প্রথম প্রশ্নে হুবহু ব্যবহার হবে)":"টপিক / অধ্যায়");
+}
+$("type").onchange=syncForm;$("smode").onchange=syncForm;syncForm();
+const PL={Bengali:["ক","খ","গ","ঘ"],English:["a","b","c","d"]};
+function answers(it){return [it.ak,it.akh,it.ag,it.agh];}
+function parts(it){return [[0,it.k,1],[1,it.kh,2],[2,it.g,3],[3,it.gh,4]];}
 let state=null,partial=null,wake=null;
 
 function paperText(withKey){
   const s=state,lab=LAB[s.lang],bn=s.lang==="Bengali";
   let t=s.inst+"\n"+s.name+"\n"+(bn?"শ্রেণি: ":"Class: ")+s.cls+"   "+(bn?"বিষয়: ":"Subject: ")+s.subj+"\n"+(bn?"সময়: ":"Time: ")+num(s.time,s.lang)+(bn?" মিনিট":" minutes")+"   "+(bn?"পূর্ণমান: ":"Full marks: ")+num(s.marks,s.lang)+"\n\n";
+  if(s.type==="creative"){
+    s.items.forEach((it,i)=>{t+=num(i+1,s.lang)+". "+it.stem+"\n"+parts(it).map(([j,x,m])=>PL[s.lang][j]+") "+x+" ["+num(m,s.lang)+"]").join("\n")+"\n\n";});
+    if(withKey)t+=(bn?"উত্তরমালা\n":"Answer key\n")+s.items.map((it,i)=>num(i+1,s.lang)+". "+answers(it).map((a,j)=>PL[s.lang][j]+") "+a).join("\n")).join("\n\n");
+    return t;
+  }
   s.items.forEach((it,i)=>{t+=num(i+1,s.lang)+". "+it.q+"\n"+it.options.map((o,j)=>lab[j]+") "+o).join("\n")+"\n\n";});
   if(withKey)t+=(bn?"উত্তরমালা\n":"Answer key\n")+s.items.map((it,i)=>num(i+1,s.lang)+"-"+lab[it.answer]).join(", ");
   return t;
@@ -84,6 +105,40 @@ function render(){
   const a=document.createElement("span");a.textContent=(bn?"সময়: ":"Time: ")+num(s.time,s.lang)+(bn?" মিনিট":" min");
   const b=document.createElement("span");b.textContent=(bn?"পূর্ণমান: ":"Full marks: ")+num(s.marks,s.lang);
   meta.append(a,b);h.appendChild(meta);p.appendChild(h);
+  if(s.type==="creative"){
+    s.items.forEach((it,i)=>{
+      const d=document.createElement("div");d.className="cq";
+      const q=document.createElement("p");q.textContent=num(i+1,s.lang)+". "+it.stem;d.appendChild(q);
+      parts(it).forEach(([j,x,m])=>{
+        const r=document.createElement("div");r.className="part";
+        const a1=document.createElement("span");a1.textContent=PL[s.lang][j]+") "+x;
+        const a2=document.createElement("span");a2.textContent=num(m,s.lang);
+        r.append(a1,a2);d.appendChild(r);
+      });
+      p.appendChild(d);
+    });
+    out.appendChild(p);
+    const key=document.createElement("div");key.className="key";key.hidden=true;
+    const kt=document.createElement("strong");kt.textContent=bn?"উত্তরমালা":"Answer key";key.appendChild(kt);
+    s.items.forEach((it,i)=>{
+      const kb=document.createElement("div");kb.className="cq";
+      const kh=document.createElement("p");kh.textContent=(bn?"প্রশ্ন ":"Question ")+num(i+1,s.lang);kb.appendChild(kh);
+      answers(it).forEach((a,j)=>{const r=document.createElement("div");r.className="part";const t1=document.createElement("span");t1.textContent=PL[s.lang][j]+") "+a;r.appendChild(t1);kb.appendChild(r);});
+      key.appendChild(kb);
+    });
+    p.appendChild(key);
+    out.appendChild(p);
+    const bar=document.createElement("div");bar.className="bar";
+    const k=document.createElement("button");k.className="sec";k.textContent="উত্তর দেখান";
+    k.onclick=()=>{key.hidden=!key.hidden;k.textContent=key.hidden?"উত্তর দেখান":"উত্তর লুকান";};
+    const c1=document.createElement("button");c1.className="sec";c1.textContent="প্রশ্নপত্র কপি";
+    const c2=document.createElement("button");c2.className="sec";c2.textContent="উত্তরসহ কপি";
+    const cp=(btn,w)=>async()=>{try{await navigator.clipboard.writeText(paperText(w));btn.textContent="কপি হয়েছে";}catch(e){btn.textContent="কপি করা যায়নি";}};
+    c1.onclick=cp(c1,false);c2.onclick=cp(c2,true);
+    const pr=document.createElement("button");pr.className="sec";pr.textContent="প্রিন্ট / PDF";pr.onclick=()=>{key.hidden=true;k.textContent="উত্তর দেখান";window.print();};
+    bar.append(k,c1,c2,pr);out.appendChild(bar);
+    return;
+  }
   s.items.forEach((it,i)=>{
     const d=document.createElement("div");d.className="q";
     const q=document.createElement("p");q.textContent=num(i+1,s.lang)+". "+it.q;d.appendChild(q);
@@ -136,8 +191,8 @@ const norm=s=>s.replace(/\s+/g,"").toLowerCase();
 $("go").onclick=async()=>{
   const inst=$("inst").value.trim(),cls=$("cls").value.trim(),subj=$("subj").value.trim(),name=$("ename").value.trim(),time=$("etime").value,marks=$("emarks").value,stem=$("stem").value.trim();
   if(!inst||!cls||!subj||!name||!time||!marks||!stem){say("প্রতিষ্ঠান, শ্রেণি, বিষয়, পরীক্ষার নাম, সময়, পূর্ণমান ও উদ্দীপক সব দিন।");return;}
-  const total=+$("n").value,lang=$("lang").value,btn=$("go");
-  const sig=[inst,cls,subj,name,stem,total,lang].join("|");
+  const type=$("type").value,auto=type==="creative"&&$("smode").value==="auto",total=+$("n").value,lang=$("lang").value,btn=$("go"),BATCH=type==="creative"?2:8;
+  const sig=[type,auto,inst,cls,subj,name,stem,total,lang].join("|");
   let items=(partial&&partial.sig===sig)?partial.items:[];
   btn.disabled=true;
   try{if(window.Notification&&Notification.permission==="default")Notification.requestPermission();}catch(e){}
@@ -146,18 +201,19 @@ $("go").onclick=async()=>{
   while(items.length<total&&fails<3){
     say(num(items.length,lang)+"/"+num(total,lang)+" "+(lang==="Bengali"?"টি প্রশ্ন তৈরি হয়েছে… পেজটি খোলা রাখুন":"questions ready… keep this page open"),items.length/total*100);
     const need=Math.min(BATCH,total-items.length);
-    const got=await fetchBatch({name:subj+" (Class "+cls+") - "+name,stem:"Subject: "+subj+"\nClass/Level: "+cls+"\n\n"+stem,lang,need,avoid:items.map(x=>x.q)});
+    const got=await fetchBatch({type,auto,first:items.length===0,name:subj+" (Class "+cls+") - "+name,stem:"Subject: "+subj+"\nClass/Level: "+cls+"\n\n"+stem,lang,need,avoid:items.map(x=>type==="creative"?x.stem.slice(0,80):x.q)});
     if(!got){fails++;continue;}
-    const seen=new Set(items.map(x=>norm(x.q)));
+    const key=x=>norm(type==="creative"?x.stem:x.q);
+    const seen=new Set(items.map(key));
     let added=0;
-    for(const x of got){if(!seen.has(norm(x.q))&&items.length<total){items.push(x);seen.add(norm(x.q));added++;}}
+    for(const x of got){if(!seen.has(key(x))&&items.length<total){items.push(x);seen.add(key(x));added++;}}
     if(!added)fails++;else fails=0;
     if(items.length<total)await sleep(5000);
   }
   if(wake){try{wake.release();}catch(e){}wake=null;}
   btn.disabled=false;
   if(items.length>=total){
-    partial=null;state={inst,name,cls,subj,time,marks,lang,items};render();
+    partial=null;state={type,inst,name,cls,subj,time,marks,lang,items};render();
     notifyDone(num(total,lang)+(lang==="Bengali"?"টি প্রশ্ন তৈরি হয়ে গেছে":" questions are ready"));
   }else{
     partial={sig,items};
