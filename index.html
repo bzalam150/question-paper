@@ -37,7 +37,12 @@ button:disabled{opacity:.6}
 <main>
 <h1>প্রশ্নপত্র জেনারেটর</h1>
 <p class="sub">পরীক্ষার তথ্য ও সৃজনশীল উদ্দীপক দিন, MCQ প্রশ্নপত্র তৈরি হবে। শেষ হলে জানিয়ে দেবে।</p>
-<label for="ename">পরীক্ষার নাম</label><input id="ename" placeholder="যেমন: দ্বিতীয় সাময়িক পরীক্ষা: ইতিহাস">
+<label for="inst">প্রতিষ্ঠানের নাম</label><input id="inst" placeholder="যেমন: ঢাকা সরকারি উচ্চ বিদ্যালয়">
+<div class="row">
+<div><label for="cls">শ্রেণি</label><input id="cls" placeholder="যেমন: অষ্টম"></div>
+<div><label for="subj">বিষয়</label><input id="subj" placeholder="যেমন: ইতিহাস"></div>
+</div>
+<label for="ename">পরীক্ষার নাম</label><input id="ename" placeholder="যেমন: দ্বিতীয় সাময়িক পরীক্ষা">
 <div class="row">
 <div><label for="etime">সময় (মিনিট)</label><input id="etime" type="number" min="1"></div>
 <div><label for="emarks">পূর্ণমান</label><input id="emarks" type="number" min="1"></div>
@@ -62,7 +67,7 @@ let state=null,partial=null,wake=null;
 
 function paperText(withKey){
   const s=state,lab=LAB[s.lang],bn=s.lang==="Bengali";
-  let t=s.name+"\n"+(bn?"সময়: ":"Time: ")+num(s.time,s.lang)+(bn?" মিনিট":" minutes")+"   "+(bn?"পূর্ণমান: ":"Full marks: ")+num(s.marks,s.lang)+"\n\n";
+  let t=s.inst+"\n"+s.name+"\n"+(bn?"শ্রেণি: ":"Class: ")+s.cls+"   "+(bn?"বিষয়: ":"Subject: ")+s.subj+"\n"+(bn?"সময়: ":"Time: ")+num(s.time,s.lang)+(bn?" মিনিট":" minutes")+"   "+(bn?"পূর্ণমান: ":"Full marks: ")+num(s.marks,s.lang)+"\n\n";
   s.items.forEach((it,i)=>{t+=num(i+1,s.lang)+". "+it.q+"\n"+it.options.map((o,j)=>lab[j]+") "+o).join("\n")+"\n\n";});
   if(withKey)t+=(bn?"উত্তরমালা\n":"Answer key\n")+s.items.map((it,i)=>num(i+1,s.lang)+"-"+lab[it.answer]).join(", ");
   return t;
@@ -72,7 +77,9 @@ function render(){
   const s=state,lab=LAB[s.lang],bn=s.lang==="Bengali";
   const p=document.createElement("div");p.className="paper";
   const h=document.createElement("div");h.className="ph";
-  const h2=document.createElement("h2");h2.textContent=s.name;h.appendChild(h2);
+  const h1=document.createElement("h2");h1.textContent=s.inst;h.appendChild(h1);
+  const h2=document.createElement("div");h2.style.fontWeight="600";h2.textContent=s.name;h.appendChild(h2);
+  const h3=document.createElement("div");h3.style.fontSize="14px";h3.textContent=(bn?"শ্রেণি: ":"Class: ")+s.cls+"   |   "+(bn?"বিষয়: ":"Subject: ")+s.subj;h.appendChild(h3);
   const meta=document.createElement("div");meta.className="meta";
   const a=document.createElement("span");a.textContent=(bn?"সময়: ":"Time: ")+num(s.time,s.lang)+(bn?" মিনিট":" min");
   const b=document.createElement("span");b.textContent=(bn?"পূর্ণমান: ":"Full marks: ")+num(s.marks,s.lang);
@@ -127,10 +134,10 @@ async function fetchBatch(args){
 const norm=s=>s.replace(/\s+/g,"").toLowerCase();
 
 $("go").onclick=async()=>{
-  const name=$("ename").value.trim(),time=$("etime").value,marks=$("emarks").value,stem=$("stem").value.trim();
-  if(!name||!time||!marks||!stem){say("পরীক্ষার নাম, সময়, পূর্ণমান ও উদ্দীপক সব দিন।");return;}
+  const inst=$("inst").value.trim(),cls=$("cls").value.trim(),subj=$("subj").value.trim(),name=$("ename").value.trim(),time=$("etime").value,marks=$("emarks").value,stem=$("stem").value.trim();
+  if(!inst||!cls||!subj||!name||!time||!marks||!stem){say("প্রতিষ্ঠান, শ্রেণি, বিষয়, পরীক্ষার নাম, সময়, পূর্ণমান ও উদ্দীপক সব দিন।");return;}
   const total=+$("n").value,lang=$("lang").value,btn=$("go");
-  const sig=[name,stem,total,lang].join("|");
+  const sig=[inst,cls,subj,name,stem,total,lang].join("|");
   let items=(partial&&partial.sig===sig)?partial.items:[];
   btn.disabled=true;
   try{if(window.Notification&&Notification.permission==="default")Notification.requestPermission();}catch(e){}
@@ -139,7 +146,7 @@ $("go").onclick=async()=>{
   while(items.length<total&&fails<3){
     say(num(items.length,lang)+"/"+num(total,lang)+" "+(lang==="Bengali"?"টি প্রশ্ন তৈরি হয়েছে… পেজটি খোলা রাখুন":"questions ready… keep this page open"),items.length/total*100);
     const need=Math.min(BATCH,total-items.length);
-    const got=await fetchBatch({name,stem,lang,need,avoid:items.map(x=>x.q)});
+    const got=await fetchBatch({name:subj+" (Class "+cls+") - "+name,stem:"Subject: "+subj+"\nClass/Level: "+cls+"\n\n"+stem,lang,need,avoid:items.map(x=>x.q)});
     if(!got){fails++;continue;}
     const seen=new Set(items.map(x=>norm(x.q)));
     let added=0;
@@ -150,7 +157,7 @@ $("go").onclick=async()=>{
   if(wake){try{wake.release();}catch(e){}wake=null;}
   btn.disabled=false;
   if(items.length>=total){
-    partial=null;state={name,time,marks,lang,items};render();
+    partial=null;state={inst,name,cls,subj,time,marks,lang,items};render();
     notifyDone(num(total,lang)+(lang==="Bengali"?"টি প্রশ্ন তৈরি হয়ে গেছে":" questions are ready"));
   }else{
     partial={sig,items};
