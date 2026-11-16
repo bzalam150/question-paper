@@ -174,15 +174,17 @@ function notifyDone(msg){
   try{if(window.Notification&&Notification.permission==="granted")new Notification("প্রশ্নপত্র জেনারেটর",{body:msg});}catch(e){}
   if(navigator.vibrate)navigator.vibrate([200,100,200]);
 }
+let lastErr="";
 async function fetchBatch(args){
   for(let a=0;a<6;a++){
     try{
       const r=await fetch("/.netlify/functions/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(args)});
-      if(r.status===429||r.status>=500){await sleep(20000);continue;}
-      const j=await r.json();
-      if(!r.ok)throw new Error(j.error||"error");
+      const txt=await r.text();
+      let j={};try{j=JSON.parse(txt);}catch(e){}
+      if(r.status===429||r.status===503){lastErr="HTTP "+r.status+" (সীমা শেষ বা সার্ভার ব্যস্ত), অপেক্ষা করছে";await sleep(20000);continue;}
+      if(!r.ok){lastErr="HTTP "+r.status+": "+String(j.error||txt).replace(/\s+/g," ").slice(0,300);if(r.status<500)return null;await sleep(8000);continue;}
       return j.items||[];
-    }catch(e){await sleep(8000);}
+    }catch(e){lastErr=String(e);await sleep(8000);}
   }
   return null;
 }
@@ -197,9 +199,9 @@ $("go").onclick=async()=>{
   btn.disabled=true;
   try{if(window.Notification&&Notification.permission==="default")Notification.requestPermission();}catch(e){}
   try{if(navigator.wakeLock)wake=await navigator.wakeLock.request("screen");}catch(e){}
-  let fails=0;
+  let fails=0;lastErr="";
   while(items.length<total&&fails<3){
-    say(num(items.length,lang)+"/"+num(total,lang)+" "+(lang==="Bengali"?"টি প্রশ্ন তৈরি হয়েছে… পেজটি খোলা রাখুন":"questions ready… keep this page open"),items.length/total*100);
+    say(num(items.length,lang)+"/"+num(total,lang)+" "+(lang==="Bengali"?"টি প্রশ্ন তৈরি হয়েছে… পেজটি খোলা রাখুন":"questions ready… keep this page open")+(lastErr?" | সমস্যা: "+lastErr:""),items.length/total*100);
     const need=Math.min(BATCH,total-items.length);
     const got=await fetchBatch({type,auto,first:items.length===0,name:subj+" (Class "+cls+") - "+name,stem:"Subject: "+subj+"\nClass/Level: "+cls+"\n\n"+stem,lang,need,avoid:items.map(x=>type==="creative"?x.stem.slice(0,80):x.q)});
     if(!got){fails++;continue;}
@@ -207,7 +209,7 @@ $("go").onclick=async()=>{
     const seen=new Set(items.map(key));
     let added=0;
     for(const x of got){if(!seen.has(key(x))&&items.length<total){items.push(x);seen.add(key(x));added++;}}
-    if(!added)fails++;else fails=0;
+    if(!added){fails++;if(!lastErr)lastErr="মডেল সঠিক ফরম্যাটে প্রশ্ন দেয়নি";}else{fails=0;lastErr="";}
     if(items.length<total)await sleep(5000);
   }
   if(wake){try{wake.release();}catch(e){}wake=null;}
@@ -217,7 +219,7 @@ $("go").onclick=async()=>{
     notifyDone(num(total,lang)+(lang==="Bengali"?"টি প্রশ্ন তৈরি হয়ে গেছে":" questions are ready"));
   }else{
     partial={sig,items};
-    say(num(items.length,lang)+"/"+num(total,lang)+" টি তৈরি হয়েছে, এরপর থেমে গেছে (সম্ভবত API সীমা)। একটু পরে আবার বাটন চাপুন, বাকিগুলো থেকে শুরু হবে।");
+    say(num(items.length,lang)+"/"+num(total,lang)+" টি তৈরি হয়েছে, এরপর থেমে গেছে (সম্ভবত API সীমা)। একটু পরে আবার বাটন চাপুন, বাকিগুলো থেকে শুরু হবে।"+(lastErr?" কারণ: "+lastErr:""));
     notifyDone("কাজ থেমে গেছে: "+num(items.length,lang)+"/"+num(total,lang));
   }
 };
